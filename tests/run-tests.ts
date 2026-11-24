@@ -243,6 +243,7 @@ import './squeezelitePlaybackStart.test';
 import './squeezeliteAlertSync.test';
 import './mixedGroupFanout.test';
 import './loxoneZoneProjection.test';
+import './loxoneCoverUrl.test';
 import './loxoneConnectGroupSnapshot.test';
 import './loxoneFixedGroups.test';
 import './loxoneSetConfig.test';

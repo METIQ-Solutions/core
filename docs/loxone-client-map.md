@@ -565,6 +565,26 @@ What a zone can do is read off the command handlers
 station's `coverurl` points there. Only JPEG, PNG, GIF and WebP are accepted, told by their
 first bytes. Pinned in `tests/customRadioCover.test.ts`.
 
+**Artwork is named by the zone, not by its host** (`buildLoxoneCoverUrl`,
+`ws/zoneStateProjection.ts`). The client GETs `coverurl` itself and caches the bytes in its
+CoverDB, which only works for a url whose response it may read: the gateway answers with
+`Access-Control-Allow-Origin: *`, a Sonos speaker's `:1400/getaa`, a streaming CDN and a station
+logo do not. A cover hosted elsewhere is therefore emitted as
+`http://<server>:7090/api/v1/zones/<pid>/cover?v=<revision>` — the same gateway route that
+serves `?size=` artwork to the web UI — and the gateway proxies whatever the zone plays now. A
+cover already on the gateway (`:7090`, library files and custom stations) is passed through
+unchanged. Pinned in `tests/loxoneCoverUrl.test.ts`.
+
+**Queue rows only exist where a source gave us a queue.** `audio/<pid>/getqueue` answers from
+the zone's own queue; a Sonos zone's queue is empty because nothing ever reads the speaker's.
+The Sonos S2 local API has no queue namespace — the queue is UPnP `ContentDirectory.Browse` on
+`Q:0` (not implemented in `@sonn-audio/node-sonos`), and for Spotify Connect the queue lives in
+Spotify's cloud and is not in `Q:0` at all, which is why the Sonos app can show it and a local
+controller cannot. `onQueueMirror` (`ExternalStateRouter`) is the seam a future Sonos queue
+would use, as Music Assistant already does; note the item schema above tolerates no per-item
+guess, so every mirrored row has to be projected onto an `audiotype`/`audiopath` the client can
+parse *and* play back through Sonos.
+
 **Closed since the first comparison:** `audio/cfg/search/…` (paged category search),
 `audio/<pid>/queue/move/<uid>/end`, `audio/cfg/roomfavs/<pid>/setplus/…`,
 `audio/cfg/storage/edit/…`, `audio/cfg/radios/modify/…`. Along the way three answers that the
