@@ -110,6 +110,7 @@ import './queueAuthority.test';
 import './queueMutations.test';
 import './queuePersistence.test';
 import './gaplessController.test';
+import './playbackOwnership.test';
 import './queueEditIntake.test';
 import './ytmusicNative.mock.test';
 import './spotifyAccountProvider.playlists.test';

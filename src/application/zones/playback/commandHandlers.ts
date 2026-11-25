@@ -16,6 +16,7 @@ import type { AirplayRemoteCommand, LineInControlCommand } from '@/ports/InputsP
 import { parseLineInInputId } from '@/application/zones/internal/zoneAudioHelpers';
 import type { ZoneAudioHelpers } from '@/application/zones/internal/zoneAudioHelpers';
 import { resolveZoneStateControllerId } from '@/application/zones/state/authorityPolicies';
+import { resumeLocalOwnership } from '@/application/zones/playback/playbackOwnership';
 
 type CommandCoordinator = {
   log: ComponentLogger;
@@ -132,6 +133,9 @@ function handlePlayResume(
     coordinator.applyPatch(zoneId, { mode: 'play', clientState: 'on', power: 'on' });
     return;
   }
+  // A resume is a listener asking for this zone's music: whatever queue it left behind is ours
+  // to walk again from here on.
+  resumeLocalOwnership(ctx);
   holdSpotify(coordinator, ctx, false);
   const session = ctx.player.resume();
   if (!session && isQueueDrivenInput(mode) && coordinator.isLocalQueueAuthority(ctx.queue.authority)) {
@@ -541,6 +545,8 @@ function handleQueuePlayCurrent(
     coordinator.log.debug('queue play-current ignored; no current item', { zoneId });
     return;
   }
+  // Picking a row is explicit too, so the queue is taken back before it starts.
+  resumeLocalOwnership(ctx);
   const isRadio = coordinator.audioHelpers.isRadioAudiopath(current.audiopath, current.audiotype);
   const metadata: PlaybackMetadata = {
     title: current.title,
