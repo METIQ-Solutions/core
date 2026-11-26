@@ -142,6 +142,9 @@ function onPlayerStarted(
     ctxReset.outputTimingActive = false;
     ctxReset.lastOutputTimingAt = 0;
     ctxReset.playerActive = true;
+    // The start resolved: the speaker is now being fed this zone's own stream, so its reports are
+    // about our content again and the state controller may be believed.
+    delete ctxReset.localStartPendingUntil;
     clearResetVolumeTimer(ctxReset);
   }
   const ctxLocal = coordinator.getZone(zoneId);
@@ -252,6 +255,8 @@ function onPlayerStopped(
     ctxReset.lastOutputTimingAt = 0;
     // The zone is off until something starts it again, and the next start is a cold one.
     ctxReset.playerActive = false;
+    // A start that stopped instead of playing is resolved too: nothing is in flight any more.
+    delete ctxReset.localStartPendingUntil;
     clearResetVolumeTimer(ctxReset);
   }
   const ctxLocal = coordinator.getZone(zoneId);
@@ -392,6 +397,11 @@ function onPlayerError(
   zoneName: string,
   sourceMac: string,
 ): void {
+  // A start that failed is no longer in flight, so the speaker's own state may be believed again.
+  const ctx = coordinator.getZone(zoneId);
+  if (ctx) {
+    delete ctx.localStartPendingUntil;
+  }
   coordinator.handlePlaybackError(zoneId, reason, 'player', { zone: zoneName, sourceMac });
 }
 

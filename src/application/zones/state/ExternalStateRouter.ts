@@ -3,7 +3,7 @@ import type { ZoneState } from '@/domain/zones/zoneState';
 import type { AudioManager } from '@/application/playback/audioManager';
 import type { PlaybackSession } from '@/ports/types/playback';
 import type { ZoneRepository } from '@/application/zones/ZoneRepository';
-import type { QueueItem } from '@/application/zones/internal/zoneTypes';
+import type { QueueItem, ZoneContext } from '@/application/zones/internal/zoneTypes';
 import { resolveZoneStateControllerId } from '@/application/zones/state/authorityPolicies';
 import type { ExternalTakeover } from '@/application/zones/state/StateController';
 
@@ -51,10 +51,34 @@ export class ExternalStateRouter {
       return;
     }
     const hasActiveLocalSession = this.deps.audioManager.hasActiveLocalSession(zoneId);
-    if (hasActiveLocalSession) {
+    // A start of our own content is in flight. The speaker has not been updated yet, so everything
+    // it reports — title, artist, album, cover, mode, position — describes the item this zone has
+    // already left. Measured on a live zone, selecting a Spotify playlist over a native Spotify
+    // session: the new item's artwork appeared with the selection, and 7.5 seconds later the
+    // controller's snapshot put the previous track's title and cover back, until playback began.
+    // While it is in flight, the controller may report the speaker's level, which is still this
+    // room's level, and nothing about what it is playing.
+    const startInFlight = isStartInFlight(ctx);
+    if (hasActiveLocalSession || startInFlight) {
       const propagated: Partial<ZoneState> = { ...patch };
       delete propagated.time;
       delete propagated.duration;
+      if (startInFlight) {
+        // Nothing it says here is about the item the zone is starting: drop what it is playing,
+        // including the transport state, which would report a pause on a track being abandoned.
+        delete propagated.mode;
+        delete propagated.sourceName;
+        delete propagated.audiotype;
+        delete propagated.audiopath;
+        delete propagated.title;
+        delete propagated.artist;
+        delete propagated.album;
+        delete propagated.coverurl;
+        delete propagated.station;
+        if (Object.keys(propagated).length === 0) return;
+        this.deps.applyPatch(zoneId, propagated);
+        return;
+      }
       // A controller that cannot name what it plays (Sonos always reports '') says nothing
       // about our content. Taking its empty audiopath blanked the path of the stream we were
       // playing, so a favourite saved from the app came out empty and would not play (#439).
@@ -152,6 +176,12 @@ export class ExternalStateRouter {
     }
     this.deps.notifyQueueUpdated(zoneId, items.length);
   }
+}
+
+/** True while a start of this zone's own playback has not resolved yet. */
+function isStartInFlight(ctx: ZoneContext): boolean {
+  const until = ctx.localStartPendingUntil;
+  return typeof until === 'number' && Date.now() < until;
 }
 
 /**

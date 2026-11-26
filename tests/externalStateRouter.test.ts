@@ -17,7 +17,7 @@ type RouterFakes = {
   setItems: Array<{ zoneId: number; items: unknown[]; index: number }>;
 };
 
-function buildRouter(opts: { controller?: string } = {}): { router: ExternalStateRouter; fakes: RouterFakes } {
+function buildRouter(opts: { controller?: string; startPendingUntil?: number } = {}): { router: ExternalStateRouter; fakes: RouterFakes } {
   const zones = new ZoneRepository();
   const fakes: RouterFakes = {
     zones,
@@ -31,6 +31,7 @@ function buildRouter(opts: { controller?: string } = {}): { router: ExternalStat
   const ctx = {
     id: 1,
     config: { state: { controller: opts.controller } },
+    localStartPendingUntil: opts.startPendingUntil,
     queueController: {
       setItems: (items: unknown[], index: number) => {
         fakes.setItems.push({ zoneId: 1, items, index });
@@ -241,4 +242,62 @@ test('ExternalStateRouter onQueueMirror notifies size 0 without applying state-p
   router.onQueueMirror(1, [], 0);
   assert.equal(fakes.applied.length, 0);
   assert.deepEqual(fakes.notifiedQueue, [{ zoneId: 1, queueSize: 0 }]);
+});
+
+// Recorded at 17:41:09 on 2026-11-26. A Spotify playlist was selected on a zone whose speaker was
+// still playing a native Spotify track at 78 seconds. The zone showed the new item immediately;
+// 7.5 seconds later the Sonos controller's snapshot put the previous track's title and cover back,
+// because the speaker had not been switched yet, and the zone kept them until playback began.
+test('ExternalStateRouter drops what the speaker is leaving while a start of ours is in flight', () => {
+  const { router, fakes } = buildRouter({
+    controller: 'sonos',
+    startPendingUntil: Date.now() + 60_000,
+  });
+  router.onStatePatch(1, {
+    mode: 'pause',
+    audiotype: 5,
+    sourceName: 'Spotify',
+    title: 'Keyboard Concerto in D Major, BWV 1054: I. -',
+    artist: 'Johann Sebastian Bach',
+    album: 'Glenn Gould plays Bach',
+    coverurl: 'http://cover/previous.jpg',
+    audiopath: 'x-sonos-spotify:spotify%3atrack%3aabc',
+    station: '',
+    time: 0,
+    duration: 468,
+    volume: 30,
+    power: 'on',
+  });
+
+  assert.deepEqual(
+    fakes.applied[0]?.patch,
+    { volume: 30, power: 'on' },
+    'only the level and the power state belong to this room; the item does not',
+  );
+});
+
+test('ExternalStateRouter believes the speaker again once the start has resolved', () => {
+  const { router, fakes } = buildRouter({ controller: 'sonos' });
+  router.onStatePatch(1, {
+    title: 'Keyboard Concerto in D Major, BWV 1054: I. -',
+    coverurl: 'http://cover/previous.jpg',
+    duration: 468,
+    time: 12,
+    volume: 30,
+  });
+  assert.equal(
+    fakes.applied[0]?.patch.title,
+    'Keyboard Concerto in D Major, BWV 1054: I. -',
+    'with nothing in flight the controller is the authority for the zone, as before',
+  );
+});
+
+test('ExternalStateRouter forgets a start window that has expired', () => {
+  const { router, fakes } = buildRouter({ controller: 'sonos', startPendingUntil: Date.now() - 1 });
+  router.onStatePatch(1, { title: 'Native track', coverurl: 'http://cover/x.jpg', volume: 30 });
+  assert.equal(
+    fakes.applied[0]?.patch.title,
+    'Native track',
+    'a start that never reported cannot hide the speaker for ever',
+  );
 });
