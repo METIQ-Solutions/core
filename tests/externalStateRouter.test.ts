@@ -106,10 +106,15 @@ test('ExternalStateRouter onStatePatch drops time-/duration-only patches while l
 test('ExternalStateRouter onStatePatch keeps our audiopath when the controller reports none (#439)', () => {
   // Sonos never names the path of what it plays and sends ''. While our stream plays that
   // blanked the zone's audiopath, and a favourite saved from the app came out empty.
+  //
+  // The same applies to what it says the item is: a controller that cannot name the path is
+  // describing the item the speaker was on before our stream reached it, so its title and cover
+  // are not ours to take. Measured live, that is what put the previous artwork back a second
+  // into a track that had just started.
   const { router, fakes } = buildRouter({ controller: 'sonos' });
   fakes.activeLocal.add(1);
-  router.onStatePatch(1, { audiopath: '', title: 'Taro', mode: 'play' });
-  assert.deepEqual(fakes.applied[0]?.patch, { title: 'Taro', mode: 'play' });
+  router.onStatePatch(1, { audiopath: '', title: 'Taro', coverurl: 'https://example.test/old.jpg', mode: 'play' });
+  assert.deepEqual(fakes.applied[0]?.patch, { mode: 'play' });
 
   fakes.applied.length = 0;
   router.onStatePatch(1, { audiopath: 'linein:5' });
