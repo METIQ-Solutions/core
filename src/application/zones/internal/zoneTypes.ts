@@ -154,6 +154,18 @@ export interface ZoneContext {
   playerActive?: boolean;
 
   /**
+   * True from the moment an ended track starts handing over to the next one until that start
+   * has resolved.
+   *
+   * In that window the old session is gone and the new one does not exist yet, so anything an
+   * external state controller reports is the speaker's own view of a stream that has just been
+   * replaced. Measured on a Sonos zone: three position updates (5, 6 and 7 seconds) were applied
+   * against the finished track while the next item was starting, which is what made the progress
+   * bar jump back and forth at every track change.
+   */
+  queueAdvancePending?: boolean;
+
+  /**
    * Start the next playback at the level the zone already carries, not at the zone default.
    *
    * Set by a gentle wake (#392): the fade-in already owns the level, and a start that put the
