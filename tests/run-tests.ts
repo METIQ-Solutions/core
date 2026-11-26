@@ -150,6 +150,7 @@ import './sonosTransportResilience.test';
 import './externalStateRouter.test';
 import './storageMountOptions.test';
 import './sonosExternalTakeover.test';
+import './volumeDefaults.test';
 import './sonosExternalVolume.test';
 import './sonosExternalSeek.test';
 import './equalizerRestartScheduler.test';
