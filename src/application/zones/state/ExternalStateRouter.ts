@@ -51,7 +51,13 @@ export class ExternalStateRouter {
       return;
     }
     const hasActiveLocalSession = this.deps.audioManager.hasActiveLocalSession(zoneId);
-    if (hasActiveLocalSession) {
+    // A queue advance is the same situation as an active session, one step earlier: the track
+    // that just ended is gone and the next one has not started, and what the controller reports
+    // in that gap describes the speaker still finishing the old stream. Measured on a Sonos
+    // zone: positions 5, 6 and 7 landed against the finished track before the next item started,
+    // and the bar jumped back and forth at every change.
+    const localPlaybackActive = hasActiveLocalSession || ctx.queueAdvancePending === true;
+    if (localPlaybackActive) {
       const propagated: Partial<ZoneState> = { ...patch };
       delete propagated.time;
       delete propagated.duration;

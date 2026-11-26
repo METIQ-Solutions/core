@@ -115,42 +115,50 @@ export async function handleEndOfTrack(args: {
   // repeat-one/repeat-all can't loop forever, and we dispatch a single stop only once exhausted.
   const visited = new Set<number>();
   let attemptedStart = false;
-  while (nextIndex >= 0 && !visited.has(nextIndex)) {
-    visited.add(nextIndex);
-    ctx.queueController.setCurrentIndex(nextIndex);
-    const next = ctx.queueController.current();
-    if (!next) {
-      stopAtEnd('queue_invalid_next');
-      return;
-    }
-    const session = await coordinator.startQueuePlayback(ctx, next.audiopath, {
-      title: next.title,
-      artist: next.artist,
-      album: next.album,
-      coverurl: next.coverurl,
-      audiopath: next.audiopath,
-      duration: next.duration,
-      station: next.station,
-    });
-    attemptedStart = true;
-    if (session) {
-      const basePatch = buildQueueItemPlaybackPatch(
-        ctx,
-        next,
-        ctx.queueController.currentIndex(),
-        coordinator.audioHelpers,
-      );
-      coordinator.applyPatch(ctx.id, {
-        ...basePatch,
-        mode: 'play',
-        clientState: 'on',
-        power: 'on',
-        time: 0,
+  // Nothing of ours is playing while the hand-over happens. An external state controller that
+  // reports the speaker's own position in that window is describing a stream that is being
+  // replaced, and applying it is what made the bar jump at every track change.
+  ctx.queueAdvancePending = true;
+  try {
+    while (nextIndex >= 0 && !visited.has(nextIndex)) {
+      visited.add(nextIndex);
+      ctx.queueController.setCurrentIndex(nextIndex);
+      const next = ctx.queueController.current();
+      if (!next) {
+        stopAtEnd('queue_invalid_next');
+        return;
+      }
+      const session = await coordinator.startQueuePlayback(ctx, next.audiopath, {
+        title: next.title,
+        artist: next.artist,
+        album: next.album,
+        coverurl: next.coverurl,
+        audiopath: next.audiopath,
+        duration: next.duration,
+        station: next.station,
       });
-      void coordinator.recentsRecord(ctx.id, next);
-      return;
+      attemptedStart = true;
+      if (session) {
+        const basePatch = buildQueueItemPlaybackPatch(
+          ctx,
+          next,
+          ctx.queueController.currentIndex(),
+          coordinator.audioHelpers,
+        );
+        coordinator.applyPatch(ctx.id, {
+          ...basePatch,
+          mode: 'play',
+          clientState: 'on',
+          power: 'on',
+          time: 0,
+        });
+        void coordinator.recentsRecord(ctx.id, next);
+        return;
+      }
+      nextIndex = ctx.queueController.nextIndex();
     }
-    nextIndex = ctx.queueController.nextIndex();
+  } finally {
+    ctx.queueAdvancePending = false;
   }
 
   // No track in the queue could be started. Preserve the distinct stop reason: a genuine start
