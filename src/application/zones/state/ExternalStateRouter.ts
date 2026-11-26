@@ -3,7 +3,7 @@ import type { ZoneState } from '@/domain/zones/zoneState';
 import type { AudioManager } from '@/application/playback/audioManager';
 import type { PlaybackSession } from '@/ports/types/playback';
 import type { ZoneRepository } from '@/application/zones/ZoneRepository';
-import type { QueueItem } from '@/application/zones/internal/zoneTypes';
+import type { QueueItem, ZoneContext } from '@/application/zones/internal/zoneTypes';
 import { resolveZoneStateControllerId } from '@/application/zones/state/authorityPolicies';
 import type { ExternalTakeover } from '@/application/zones/state/StateController';
 
@@ -53,28 +53,49 @@ export class ExternalStateRouter {
       return;
     }
     const hasActiveLocalSession = this.deps.audioManager.hasActiveLocalSession(zoneId);
+    // A start of our own content is in flight. The speaker has not been updated yet, so everything
+    // it reports — title, artist, album, cover, mode, position — describes the item this zone has
+    // already left. Measured on a live zone, selecting a Spotify playlist over a native Spotify
+    // session: the new item's artwork appeared with the selection, and 7.5 seconds later the
+    // controller's snapshot put the previous track's title and cover back, until playback began.
+    // While it is in flight, the controller may report the speaker's level, which is still this
+    // room's level, and nothing about what it is playing.
+    const startInFlight = isStartInFlight(ctx);
     // A queue advance is the same situation as an active session, one step earlier: the track
     // that just ended is gone and the next one has not started, and what the controller reports
     // in that gap describes the speaker still finishing the old stream. Measured on a Sonos
     // zone: positions 5, 6 and 7 landed against the finished track before the next item started,
     // and the bar jumped back and forth at every change.
-    const localPlaybackActive = hasActiveLocalSession || ctx.queueAdvancePending === true;
+    const localPlaybackActive =
+      hasActiveLocalSession || startInFlight || ctx.queueAdvancePending === true;
     if (localPlaybackActive) {
       const propagated: Partial<ZoneState> = { ...patch };
       delete propagated.time;
       delete propagated.duration;
-      // A controller that cannot name what it plays (Sonos always reports '') says nothing
-      // about our content. Taking its empty audiopath blanked the path of the stream we were
-      // playing, so a favourite saved from the app came out empty and would not play (#439).
-      // A speaker that really went elsewhere ends the session first (onExternalTakeover).
-      //
-      // The same reasoning covers what it says the item *is*. Measured on a live zone, starting
-      // a track from the queue: the correct artwork appeared with the selection, and one second
-      // into playback the controller's snapshot put the previous title and the previous cover
-      // back, because the speaker was still describing the item it had been playing before our
-      // stream reached it. The title was corrected by the next metadata event; the cover was
-      // not, and stayed wrong until something else refreshed it.
-      if (propagated.audiopath === '') {
+      if (startInFlight) {
+        // Nothing it says here is about the item the zone is starting: drop what it is playing,
+        // including the transport state, which would report a pause on a track being abandoned.
+        delete propagated.mode;
+        delete propagated.sourceName;
+        delete propagated.audiotype;
+        delete propagated.audiopath;
+        delete propagated.title;
+        delete propagated.artist;
+        delete propagated.album;
+        delete propagated.coverurl;
+        delete propagated.station;
+      } else if (propagated.audiopath === '') {
+        // A controller that cannot name what it plays (Sonos always reports '') says nothing
+        // about our content. Taking its empty audiopath blanked the path of the stream we were
+        // playing, so a favourite saved from the app came out empty and would not play (#439).
+        // A speaker that really went elsewhere ends the session first (onExternalTakeover).
+        //
+        // The same reasoning covers what it says the item *is*. Measured on a live zone, starting
+        // a track from the queue: the correct artwork appeared with the selection, and one second
+        // into playback the controller's snapshot put the previous title and the previous cover
+        // back, because the speaker was still describing the item it had been playing before our
+        // stream reached it. The title was corrected by the next metadata event; the cover was
+        // not, and stayed wrong until something else refreshed it.
         delete propagated.audiopath;
         delete propagated.title;
         delete propagated.artist;
@@ -168,6 +189,12 @@ export class ExternalStateRouter {
     }
     this.deps.notifyQueueUpdated(zoneId, items.length);
   }
+}
+
+/** True while a start of this zone's own playback has not resolved yet. */
+function isStartInFlight(ctx: ZoneContext): boolean {
+  const until = ctx.localStartPendingUntil;
+  return typeof until === 'number' && Date.now() < until;
 }
 
 /**

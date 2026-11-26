@@ -166,6 +166,23 @@ export interface ZoneContext {
   queueAdvancePending?: boolean;
 
   /**
+   * Until when a deliberate start of this zone's own playback is in flight.
+   *
+   * A start is not instant: the engine has to be brought up and to produce its first audio, which
+   * was measured at 7.5 seconds for a Spotify playlist on a Sonos zone and is about 40 seconds for
+   * this server's own Spotify run. For that whole window the zone already shows the item the
+   * listener picked, while the speaker is still playing - or paused on - the item before it. A
+   * state controller reports the speaker, so what it says there describes content this zone has
+   * already left: measured on a live zone, the previous track's title and artwork came back 7.5
+   * seconds after a playlist was selected, and stayed until playback began.
+   *
+   * The window is a deadline rather than a flag so a start that never completes cannot leave the
+   * zone unable to report what its speaker is playing. `onPlayerStarted`, `onPlayerStopped` and
+   * `onPlayerError` clear it as soon as the start resolves either way.
+   */
+  localStartPendingUntil?: number;
+
+  /**
    * Start the next playback at the level the zone already carries, not at the zone default.
    *
    * Set by a gentle wake (#392): the fade-in already owns the level, and a start that put the

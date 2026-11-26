@@ -84,6 +84,14 @@ const UNKNOWN_OUTPUT_LAG_MS = 1000;
 const PLAYOUT_LAG_MAX_AGE_MS = 30_000;
 
 /**
+ * How long a start of the zone's own playback keeps the speaker's view out of the zone state.
+ *
+ * Twice the longest measured start (this server's own Spotify run, about 40 seconds from request
+ * to first audio), and only a ceiling: a start that resolves clears it long before this.
+ */
+const LOCAL_START_PENDING_MS = 90_000;
+
+/**
  * What a listener is told when a bridged service's stream never arrives.
  *
  * Only the name differs for most of them. The exception is a service whose
@@ -478,6 +486,11 @@ export class PlaybackCoordinator {
     metadata?: PlaybackMetadata,
     options?: { skipExternalStop?: boolean; startAtSec?: number },
   ): Promise<PlaybackSession | null> {
+    // From here until the player reports that it started, this zone's own content is what it is
+    // about, whatever its speaker is still playing. The speaker is not updated for seconds, so a
+    // state controller that keeps reporting it would put the previous track's title, cover and
+    // position back over the item the listener has just picked.
+    ctx.localStartPendingUntil = Date.now() + LOCAL_START_PENDING_MS;
     this.crossfade.clear(ctx.id);
     this.gapless.clear(ctx.id);
     const hasRadioParadise =
