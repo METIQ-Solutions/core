@@ -149,6 +149,7 @@ import './sonosTransportResilience.test';
 import './externalStateRouter.test';
 import './storageMountOptions.test';
 import './sonosExternalTakeover.test';
+import './startedPatchArtwork.test';
 import './sonosExternalVolume.test';
 import './equalizerRestartScheduler.test';
 import './zoneHeartbeatService.test';
