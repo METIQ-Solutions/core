@@ -283,6 +283,13 @@ export function buildQueueItemPlaybackPatch(
     qid: item.unique_id,
     type: audioHelpers.getStateFileType(),
     duration: typeof item.duration === 'number' ? Math.max(0, Math.round(item.duration)) : 0,
+    // This patch announces a new item, so it has to carry the position of one: zero. It did not,
+    // and every caller that knew to say so added `time: 0` itself — all but the one that answers
+    // a selection. Measured on a live zone, selecting a Spotify playlist while a native Spotify
+    // track was 78 seconds in published the new title and its 84 second length with position 78,
+    // which then kept counting to 85 against an 84 second track. A caller that means something
+    // else (a restored queue resuming where it was) overrides this, as it already did.
+    time: 0,
   };
   if (stateAudiotype != null) {
     patch.audiotype = resolveDisplayAudiotype(stateAudiotype, ctx.queue.authority);

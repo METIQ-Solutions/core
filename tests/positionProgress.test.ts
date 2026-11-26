@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from './testHarness';
 import { SonosStateController } from '../src/application/zones/state/SonosStateController';
 import { ExternalStateRouter } from '../src/application/zones/state/ExternalStateRouter';
+import { buildQueueItemPlaybackPatch } from '../src/application/zones/playback/patchBuilder';
 import type { ZoneState } from '../src/domain/zones/zoneState';
 
 // The bar jumped at a track change because the position and the item it belongs to were published
@@ -301,4 +302,39 @@ test('a song changing inside a radio stream is not a change of item', () => {
 
   assert.equal(patches[0]!.time, 120, 'the stream keeps its position');
   assert.notEqual(patches[0]!.time, 0, 'and is not reset when the song inside it changes');
+});
+// Recorded at 17:41:09 and 17:42:16 on 2026-11-26, selecting the same Spotify playlist twice while
+// a Spotify track was 78 seconds in and then 20 seconds in. Each time the zone showed the new item
+// with its own length and the *previous* item's position, which then counted on against the new
+// length (85 against an 84 second track). An item that is being announced starts at its beginning.
+test('an item announced by a selection starts at its beginning, not at the previous position', () => {
+  const ctx = {
+    id: 2,
+    name: 'Wohnzimmer',
+    state: { time: 78, duration: 468, title: 'Keyboard Concerto in D Major', audiopath: 'spotify:track:old' },
+    metadata: {},
+    queue: { authority: 'local' },
+  } as any;
+  const item = {
+    title: 'Reprise',
+    artist: 'Anoushka Shankar, Karsh Kale',
+    album: 'Breathing Under Water',
+    audiopath: 'spotify:track:2WsWN4tv40Xl2h5qaQRubB',
+    coverurl: 'http://cover/reprise.jpg',
+    duration: 84,
+    unique_id: 'q2',
+    audiotype: 5,
+  } as any;
+
+  const patch = buildQueueItemPlaybackPatch(ctx, item, 0, {
+    getStateAudiotype: () => 5,
+    getStateFileType: () => 0,
+    resolveSourceName: () => 'Spotify',
+    isRadioAudiopath: () => false,
+    resolveAlertEventType: () => 0,
+  } as any);
+
+  assert.equal(patch.time, 0, 'the new item starts at its beginning');
+  assert.equal(patch.duration, 84, 'and carries its own length');
+  assert.equal(patch.title, 'Reprise', 'with its own name');
 });
