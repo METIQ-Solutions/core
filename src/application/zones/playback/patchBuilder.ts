@@ -186,6 +186,13 @@ export function buildStartedPatch(args: {
   if (typeof meta.artist === 'string' && meta.artist.trim()) {
     activePatch.artist = meta.artist;
   }
+  // Artwork follows the same rule. A queue row keeps the cover it was stored with, which may be
+  // empty or belong to a previous item, and it is spread last. Measured on a Sonos zone: the
+  // title changed on a start from the queue, the artwork did not, and it appeared only after the
+  // first seek. A session without artwork leaves the queue row as the fallback.
+  if (typeof meta.coverurl === 'string' && meta.coverurl.trim()) {
+    activePatch.coverurl = meta.coverurl;
+  }
   return { ...basePatch, ...activePatch };
 }
 
