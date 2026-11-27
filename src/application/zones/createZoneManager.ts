@@ -36,6 +36,7 @@ export type ZoneManagerFacade = Pick<
   | 'getPlayContext'
   | 'getActiveAlertEvent'
   | 'getTransportCapabilities'
+  | 'getNativeItemKey'
   | 'getLoudness'
   | 'setLoudness'
   | 'handleCommand'

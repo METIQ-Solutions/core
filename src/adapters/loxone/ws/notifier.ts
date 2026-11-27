@@ -37,6 +37,7 @@ export class LoxoneWsNotifier {
   private settingsUrlLookup: (() => string | null) | null = null;
   private coverUrlLookup: ((state: ZoneState) => string) | null = null;
   private transportLookup: ((zoneId: number) => LoxoneTransport | null) | null = null;
+  private nativeItemKeyLookup: ((zoneId: number) => string | null) | null = null;
   private readonly dialogThrottle = new DialogThrottle();
 
   constructor(
@@ -96,6 +97,15 @@ export class LoxoneWsNotifier {
    */
   public setTransportLookup(lookup: ((zoneId: number) => LoxoneTransport | null) | null): void {
     this.transportLookup = lookup;
+  }
+
+  /**
+   * What each zone playing somebody else's session is playing, surfaced in `audio_event` as
+   * `qid` so a native item gets an id that changes with it. When unset, `qid` is whatever the
+   * zone state carries, which is only right for this server's own queue.
+   */
+  public setNativeItemKeyLookup(lookup: ((zoneId: number) => string | null) | null): void {
+    this.nativeItemKeyLookup = lookup;
   }
 
   /**
@@ -203,6 +213,7 @@ export class LoxoneWsNotifier {
       serviceAccounts: () => this.serviceAccountsLookup?.() ?? [],
       transport: this.transportLookup?.(state.id) ?? null,
       alertEvent: this.alertEventLookup?.(state.id) ?? null,
+      nativeItemKey: this.nativeItemKeyLookup?.(state.id) ?? null,
       coverUrlToLoxone: this.coverUrlLookup ?? undefined,
     });
   }

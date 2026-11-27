@@ -12,6 +12,7 @@ import type { AudioEventType, AudioType, FileType, LineInIconType } from '@/doma
 import { parseServiceNativeAudiopath } from '@/domain/zones/audiopath';
 import type { ZoneState } from '@/domain/zones/zoneState';
 import { formatEqualizerSettings } from '@/domain/zones/equalizer';
+import { deriveQueueId } from '@/shared/utils/queueId';
 import { artworkOrigin, type ArtworkOriginSettings } from '@/shared/artworkOrigin';
 
 /**
@@ -109,6 +110,12 @@ export type ZoneStateProjectionContext = {
   transport?: LoxoneTransport | null;
   /** The alert the zone is playing right now; null or absent when it plays none. */
   alertEvent?: AudioEventType | null;
+  /**
+   * What a zone playing somebody else's session is playing, as identity — see
+   * `ZoneManager.getNativeItemKey`. Absent for a zone this server is playing, whose queue item
+   * already carries an id.
+   */
+  nativeItemKey?: string | null;
   /**
    * Rewrites the zone's artwork url into one the native client may fetch — see
    * {@link buildLoxoneCoverUrl}. Unset leaves the provider's url verbatim.
@@ -238,6 +245,36 @@ function streamingAccount(
 }
 
 /**
+ * The id that tells a client one item from the next.
+ *
+ * While this server plays its own queue, that is the queue item's id, and it changes exactly when
+ * the item does. While a *speaker* plays a session somebody else started, there is no queue item
+ * here: `qid`, `qindex` and `audiopath` are never written for that path, so the zone keeps naming
+ * whatever it last played from its own queue. Measured on a live zone, all three were constant
+ * across 225 events spanning three tracks — one queue id (`9e20f1b1d3b0`, a leftover
+ * `generateQueueId()`), `qindex` 0, and an empty `audiopath` — and the client, which keeps per-item
+ * progress state keyed on this id, went on clamping every position to the first track's length:
+ * 258 seconds, whatever the real position was, until the position happened to fall below it again.
+ *
+ * A native item is therefore identified by what the speaker says it is playing. The id is derived
+ * from that identity rather than drawn, so the things that are not a change of item — a seek, a
+ * pause and resume, a volume change, new artwork — keep the id they had, and only a different item
+ * produces a different one.
+ *
+ * A track played twice in a row keeps the same id, because it is the same track; the client's
+ * per-item state is then still correct for it, its length being the same. Distinguishing two
+ * *playbacks* of one track would need an instance counter, and nothing in the evidence says a
+ * client wants that, while the cost of getting it wrong is a reset in the middle of a track.
+ */
+function toLoxoneQid(state: ZoneState, ctx: ZoneStateProjectionContext): string | undefined {
+  const nativeKey = ctx.nativeItemKey?.trim();
+  if (nativeKey) {
+    return deriveQueueId(nativeKey);
+  }
+  return state.qid;
+}
+
+/**
  * The `parent` of a zone's audio_event, or null when sending one would do harm.
  *
  * A parent is not free. Without one the client marks a row as playing when its audiopath is
@@ -303,7 +340,7 @@ export function toLoxoneZoneState(
     station: blankAudiopathStation(state.station),
     time: state.time,
     title: titleOrFallback(state.title, state.name),
-    qid: state.qid,
+    qid: toLoxoneQid(state, ctx),
     ...(ctx.alertEvent != null ? { eventype: ctx.alertEvent } : {}),
     type: state.type,
     volume: state.volume,

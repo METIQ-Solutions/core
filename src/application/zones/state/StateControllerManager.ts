@@ -83,6 +83,23 @@ export class StateControllerManager {
     }
   }
 
+  /** What the player owning this zone says it is playing, or null when it cannot say. */
+  public getPlayingItemKey(zoneId: number): string | null {
+    const controller = this.controllers.get(zoneId);
+    if (!controller?.getPlayingItemKey) {
+      return null;
+    }
+    try {
+      return controller.getPlayingItemKey();
+    } catch (err) {
+      this.log.debug('state controller item key failed', {
+        zoneId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return null;
+    }
+  }
+
   public async replaceAll(zones: ZoneConfig[]): Promise<void> {
     await this.stopAll();
     // Start zones in parallel. Each controller's start() already swallows its

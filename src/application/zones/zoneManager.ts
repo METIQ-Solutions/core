@@ -162,6 +162,23 @@ function normalizeCommandName(command: string): string {
   return command.trim().toLowerCase();
 }
 
+/**
+ * The identity a native item is recognised by when the speaker cannot name it: its title and
+ * album, the same two fields the Sonos controller keys its own change detection on.
+ *
+ * The artist is deliberately not part of it. A radio stream keeps its station as the title and
+ * reports each song it plays as the artist, so an artist in the key would turn every song of an
+ * unchanged stream into a new item.
+ */
+function nativeItemKeyFromState(state: ZoneState): string | null {
+  const title = (state.title ?? '').trim();
+  const album = (state.album ?? '').trim();
+  if (!title && !album) {
+    return null;
+  }
+  return `${title}|${album}`;
+}
+
 export type ZoneQueueOps = Pick<
   ZoneQueueController,
   | 'setShuffle'
@@ -1239,6 +1256,34 @@ export class ZoneManager {
       return null;
     }
     return this.stateControllers.getTransportCapabilities(ctx.id);
+  }
+
+  /**
+   * What a zone playing somebody else's session is playing, as identity, or null when this
+   * server is the one playing.
+   *
+   * Only ever set for a zone whose speaker owns the playback: this server's own content has a
+   * queue item, and that item's id is the identity. A native session has no queue item here,
+   * which is why the speaker has to be asked what it is playing.
+   *
+   * The controller's own key is preferred, and the zone's reported title and album are the
+   * fallback, so a speaker that has gone quiet cannot make the identity flap back to whatever
+   * queue item this zone last played.
+   */
+  public getNativeItemKey(zoneId: number): string | null {
+    const ctx = this.zoneRepo.get(zoneId);
+    if (!ctx) {
+      return null;
+    }
+    // The same conditions that decide a speaker owns this zone: an external controller, and no
+    // session of ours feeding it.
+    if (resolveZoneStateControllerId(ctx.config) === 'internal') {
+      return null;
+    }
+    if (this.audioManager.hasActiveLocalSession(ctx.id) || this.audioManager.hasLocalEngineSession(ctx.id)) {
+      return null;
+    }
+    return this.stateControllers.getPlayingItemKey(ctx.id) ?? nativeItemKeyFromState(ctx.state);
   }
 
   /** The alert a zone is playing right now; null when it plays none or is unknown. */
