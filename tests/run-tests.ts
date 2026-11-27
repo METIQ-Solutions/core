@@ -152,6 +152,7 @@ import './storageMountOptions.test';
 import './sonosExternalTakeover.test';
 import './volumeDefaults.test';
 import './positionProgress.test';
+import './loxoneCoverOrigin.test';
 import './loxonePositionRead.test';
 import './sonosExternalVolume.test';
 import './sonosExternalSeek.test';
