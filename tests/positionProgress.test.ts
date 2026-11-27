@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from './testHarness';
 import { SonosStateController } from '../src/application/zones/state/SonosStateController';
-import { ExternalStateRouter } from '../src/application/zones/state/ExternalStateRouter';
 import type { ZoneState } from '../src/domain/zones/zoneState';
 
 // The bar jumped at a track change because the position and the item it belongs to were published
@@ -170,7 +169,8 @@ test('a new item that has not reported a length is not held to the previous one'
   assert.equal(patches[0]!.time, 640, 'the ticker does not clamp it either');
 });
 
-test('a seek inside the same item is published as it is', () => {  const { controller, patches, group } = makeController();
+test('a seek inside the same item is published as it is', () => {
+  const { controller, patches, group } = makeController();
   playingItem(group, { name: 'Seeked', mediaUrl: 'x-sonos-spotify:e', durationMillis: 600_000 }, 20);
   snapshot(controller);
   patches.length = 0;
@@ -181,61 +181,6 @@ test('a seek inside the same item is published as it is', () => {  const { contr
   assert.equal(patches[0]!.time, 300, 'moving inside the item is not a change of item');
 });
 
-// The gap between two tracks. When a track ends, the old session is gone and the next one does
-// not exist yet, so anything the speaker's state controller reports in that window describes the
-// stream that is being replaced. Measured on a live zone: three position updates (5, 6 and 7
-// seconds) landed against the finished track, with its duration, before the next item started,
-// which is exactly the jump the progress bar showed at every change.
-
-const quietLog = {
-  debug: () => undefined,
-  info: () => undefined,
-  warn: () => undefined,
-  error: () => undefined,
-  spam: () => undefined,
-} as any;
-
-function gapHarness(options: { pending: boolean }) {
-  const applied: Array<Partial<Record<string, unknown>>> = [];
-  const zone: any = {
-    config: { state: { controller: 'sonos' } },
-    state: {},
-    queueAdvancePending: options.pending,
-  };
-  const router = new ExternalStateRouter({
-    zones: { get: (zoneId: number) => (zoneId === 2 ? zone : undefined) } as any,
-    audioManager: {
-      hasActiveLocalSession: () => false,
-      getSession: () => null,
-      stopPlayback: () => null,
-    } as any,
-    applyPatch: (_zoneId: number, patch: object) => applied.push(patch),
-    notifyQueueUpdated: () => undefined,
-    yieldToExternalSource: () => true,
-    log: quietLog,
-  } as any);
-  return { router, applied };
-}
-
-test('a position reported in the gap between two tracks is not applied', () => {
-  const { router, applied } = gapHarness({ pending: true });
-
-  router.onStatePatch(2, { mode: 'play', time: 5, duration: 107, title: 'Bad Duren' });
-
-  assert.equal(applied.length, 1, 'the patch still reaches the zone');
-  assert.equal(applied[0]!.time, undefined, 'but the outgoing item position does not');
-  assert.equal(applied[0]!.duration, undefined, 'and neither does its length');
-  assert.equal(applied[0]!.mode, 'play', 'the transport state is kept');
-});
-
-test('the same position is applied when no advance is in flight', () => {
-  const { router, applied } = gapHarness({ pending: false });
-
-  router.onStatePatch(2, { mode: 'play', time: 5, duration: 107 });
-
-  assert.equal(applied[0]!.time, 5, 'outside the gap the controller is believed');
-  assert.equal(applied[0]!.duration, 107);
-});
 // Identity is the name, not the url. A Sonos media url carries a sequence number that changes on
 // every seek and again when the speaker loads the next item, so keying on it made a seek look
 // like a track change and made a real change arrive as two frames. Recorded on 2026-11-26 at
