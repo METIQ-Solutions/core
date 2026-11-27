@@ -61,20 +61,8 @@ export class ExternalStateRouter {
       // about our content. Taking its empty audiopath blanked the path of the stream we were
       // playing, so a favourite saved from the app came out empty and would not play (#439).
       // A speaker that really went elsewhere ends the session first (onExternalTakeover).
-      //
-      // The same reasoning covers what it says the item *is*. Measured on a live zone, starting
-      // a track from the queue: the correct artwork appeared with the selection, and one second
-      // into playback the controller's snapshot put the previous title and the previous cover
-      // back, because the speaker was still describing the item it had been playing before our
-      // stream reached it. The title was corrected by the next metadata event; the cover was
-      // not, and stayed wrong until something else refreshed it.
       if (propagated.audiopath === '') {
         delete propagated.audiopath;
-        delete propagated.title;
-        delete propagated.artist;
-        delete propagated.album;
-        delete propagated.coverurl;
-        delete propagated.station;
       }
       if (Object.keys(propagated).length === 0) return;
       this.deps.applyPatch(zoneId, propagated);

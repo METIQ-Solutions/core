@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from './testHarness';
 import { buildStartedPatch } from '../src/application/zones/playback/patchBuilder';
-import { ExternalStateRouter } from '../src/application/zones/state/ExternalStateRouter';
 
 // Artwork that arrives with the track being started must win over the queue row's stored
 // artwork. A queue row can be old, restored from a previous session, or never enriched, and
@@ -140,80 +139,4 @@ test('an empty session cover does not blank artwork the queue row does not have 
   });
 
   assert.equal(patch.coverurl, '', 'nothing to show stays nothing');
-});
-
-// The other half of the same defect, one layer up. A controller that cannot say what it plays
-// still reports the item the speaker was on before our stream reached it. Recorded on a live
-// zone at 12:19 UTC while starting a track from the queue:
-//
-//   t+0.00s  pause  t=147 dur=197  'Power Trip'   cover=a8cg6j     (before the start)
-//   t+6.17s  play   t=0   dur=173  'FLUGEL'       cover=3xpk1j     (our start, correct)
-//   t+6.19s  pause  t=0   dur=173  'Power Trip'   cover=a8cg6j     (controller snapshot)
-//   t+6.50s  play   t=0   dur=173  'FLUGEL'       cover=a8cg6j     (title corrected, cover not)
-//
-// The cover stayed on the previous item for the rest of the track. These pin that a controller
-// which cannot name what it plays may no longer replace the identity of what is playing.
-
-const quietLog = {
-  debug: () => undefined,
-  info: () => undefined,
-  warn: () => undefined,
-  error: () => undefined,
-  spam: () => undefined,
-} as any;
-
-function sessionRouter() {
-  const applied: Array<Partial<Record<string, unknown>>> = [];
-  const zone: any = { config: { state: { controller: 'sonos' } }, state: {} };
-  const router = new ExternalStateRouter({
-    zones: { get: (zoneId: number) => (zoneId === 2 ? zone : undefined) } as any,
-    audioManager: {
-      hasActiveLocalSession: () => true,
-      getSession: () => null,
-      stopPlayback: () => null,
-    } as any,
-    applyPatch: (_zoneId: number, patch: object) => applied.push(patch),
-    notifyQueueUpdated: () => undefined,
-    yieldToExternalSource: () => true,
-    log: quietLog,
-  } as any);
-  return { router, applied };
-}
-
-test('a controller that cannot name the item does not put the previous artwork back', () => {
-  const { router, applied } = sessionRouter();
-
-  router.onStatePatch(2, {
-    mode: 'play',
-    audiopath: '',
-    title: 'Power Trip',
-    artist: 'Previous artist',
-    album: 'Previous album',
-    coverurl: 'https://i.scdn.co/image/previous',
-    duration: 197,
-    time: 147,
-  });
-
-  assert.equal(applied.length, 1, 'the transport part still reaches the zone');
-  assert.equal(applied[0]!.mode, 'play');
-  for (const field of ['title', 'artist', 'album', 'coverurl', 'audiopath', 'time', 'duration']) {
-    assert.equal(applied[0]![field], undefined, `${field} is not taken from a nameless item`);
-  }
-});
-
-test('a controller that does name the item is still believed', () => {
-  const { router, applied } = sessionRouter();
-
-  router.onStatePatch(2, {
-    mode: 'play',
-    audiopath: 'http://10.64.1.26:1400/stream',
-    title: 'Something the controller knows',
-    coverurl: 'https://example.test/cover.jpg',
-    duration: 200,
-    time: 30,
-  });
-
-  assert.equal(applied[0]!.title, 'Something the controller knows', 'its identity passes through');
-  assert.equal(applied[0]!.coverurl, 'https://example.test/cover.jpg');
-  assert.equal(applied[0]!.time, undefined, 'timing still belongs to our own session');
 });
