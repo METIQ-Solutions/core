@@ -150,6 +150,7 @@ import './externalStateRouter.test';
 import './storageMountOptions.test';
 import './sonosExternalTakeover.test';
 import './positionProgress.test';
+import './nativeItemIdentity.test';
 import './loxonePositionRead.test';
 import './sonosExternalVolume.test';
 import './equalizerRestartScheduler.test';

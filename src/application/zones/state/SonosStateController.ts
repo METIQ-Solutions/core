@@ -332,6 +332,20 @@ export class SonosStateController implements ZoneStateController {
     return true;
   }
 
+  /**
+   * What the speaker says it is playing, as identity: the item's name and album.
+   *
+   * The same value the snapshot builder uses to decide that the item changed, so the id a client
+   * is given and the moment this server decides the track moved cannot disagree.
+   */
+  public getPlayingItemKey(): string | null {
+    const group = this.client?.player?.group;
+    if (!group) {
+      return null;
+    }
+    return this.currentItemKey(group);
+  }
+
   private startTicker(): void {
     if (this.timeTicker) {
       clearInterval(this.timeTicker);
